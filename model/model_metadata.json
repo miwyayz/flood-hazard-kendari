@@ -1,15 +1,14 @@
 {
     "model_name": "XGBoost Flood Hazard Classifier",
     "versi": "1.0",
-    "tanggal_latih": "2026-06-19 06:25:27",
+    "tanggal_latih": "2026-06-19 14:40:04",
     "fitur_input": [
         "Elevation",
         "LandCover",
         "Rainfall",
         "Slope",
         "Soil_Type",
-        "Drainage_Length",
-        "Drainage_Score"
+        "Drainage_Length"
     ],
     "kelas_output": [
         "rendah",
@@ -38,8 +37,8 @@
         "reg_lambda": 1.0
     },
     "smote": true,
-    "cv_f1_mean": 0.9633224988738579,
-    "cv_f1_std": 0.010300847018585628,
-    "test_accuracy": 0.955,
-    "test_f1": 0.9502702702702703
+    "cv_f1_mean": 0.9643603621178288,
+    "cv_f1_std": 0.009482980021491927,
+    "test_accuracy": 0.95,
+    "test_f1": 0.9452045015537079
 }
