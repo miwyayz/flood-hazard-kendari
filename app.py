@@ -291,14 +291,14 @@ elif halaman == "📊 Prediksi Batch (CSV)":
         else:
             df_proc = df_up[FEATURE_NAMES].copy()
 
-            # Encode Soil_Type jika string
             if df_proc["Soil_Type"].dtype == object:
-                unknown = set(df_proc["Soil_Type"].unique()) - set(le_soil.classes_)
-                if unknown:
-                    st.error(f"❌ Soil_Type tidak dikenal: {unknown}. Nilai valid: {list(le_soil.classes_)}")
-                    st.stop()
                 df_proc["Soil_Type"] = le_soil.transform(df_proc["Soil_Type"].astype(str))
-
+            
+            KOLOM_NUMERIK = [f for f in FEATURE_NAMES if f != "Soil_Type"]
+            for col in KOLOM_NUMERIK:
+                df_proc[col] = pd.to_numeric(df_proc[col], errors="coerce")
+            
+            df_proc = df_proc.astype(float)
             pred_enc  = model.predict(df_proc)
             pred_label = le_target.inverse_transform(pred_enc)
             pred_proba = model.predict_proba(df_proc).max(axis=1)
@@ -365,16 +365,16 @@ elif halaman == "🗺️ Peta Interaktif":
         else:
             df_proc = df_map[FEATURE_NAMES].copy()
 
-# Encode Soil_Type jika masih string
-if df_proc["Soil_Type"].dtype == object:
-    df_proc["Soil_Type"] = le_soil.transform(df_proc["Soil_Type"].astype(str))
-
-# Paksa semua kolom ke numerik
-KOLOM_NUMERIK = [f for f in FEATURE_NAMES if f != "Soil_Type"]
-for col in KOLOM_NUMERIK:
-    df_proc[col] = pd.to_numeric(df_proc[col], errors="coerce")
-
-df_proc = df_proc.astype(float)
+            # Encode Soil_Type jika masih string
+            if df_proc["Soil_Type"].dtype == object:
+                df_proc["Soil_Type"] = le_soil.transform(df_proc["Soil_Type"].astype(str))
+            
+            # Paksa semua kolom ke numerik
+            KOLOM_NUMERIK = [f for f in FEATURE_NAMES if f != "Soil_Type"]
+            for col in KOLOM_NUMERIK:
+                df_proc[col] = pd.to_numeric(df_proc[col], errors="coerce")
+            
+            df_proc = df_proc.astype(float)
 
             pred_enc   = model.predict(df_proc)
             pred_label = le_target.inverse_transform(pred_enc)
