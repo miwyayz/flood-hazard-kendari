@@ -57,6 +57,19 @@ EMOJI_ZONA = {
 }
 
 # ============================================================
+# HELPER — preprocessing input sebelum prediksi
+# ============================================================
+def preprocess(df: pd.DataFrame) -> pd.DataFrame:
+    df = df[FEATURE_NAMES].copy()
+    # Encode Soil_Type jika masih string
+    if df["Soil_Type"].dtype == object:
+        df["Soil_Type"] = le_soil.transform(df["Soil_Type"].astype(str))
+    # Konversi tiap kolom ke float satu per satu
+    for col in FEATURE_NAMES:
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
+    return df
+
+# ============================================================
 # SIDEBAR — NAVIGASI
 # ============================================================
 with st.sidebar:
@@ -188,18 +201,16 @@ elif halaman == "🔍 Prediksi Titik":
         submitted = st.form_submit_button("🔮 Prediksi Sekarang", use_container_width=True, type="primary")
 
     if submitted:
-        # Bangun input
-        input_dict = {
-            "Elevation"      : elevation,
-            "LandCover"      : land_cover,
-            "Rainfall"       : rainfall,
-            "Slope"          : slope,
-            "Soil_Type"      : le_soil.transform([soil_type])[0],
-            "Drainage_Length": drainage_length,
-            "Drainage_Score" : drainage_score,
+        row = {
+            "Elevation"      : float(elevation),
+            "LandCover"      : float(land_cover),
+            "Rainfall"       : float(rainfall),
+            "Slope"          : float(slope),
+            "Soil_Type"      : float(le_soil.transform([soil_type])[0]),
+            "Drainage_Length": float(drainage_length),
+            "Drainage_Score" : float(drainage_score),
         }
-        # Pastikan urutan fitur sesuai training
-        df_input = pd.DataFrame([{f: input_dict[f] for f in FEATURE_NAMES}])
+        df_input = pd.DataFrame([[row[f] for f in FEATURE_NAMES]], columns=FEATURE_NAMES)
 
         label_enc  = model.predict(df_input)[0]
         label_name = le_target.inverse_transform([label_enc])[0]
@@ -208,8 +219,8 @@ elif halaman == "🔍 Prediksi Titik":
         confidence = float(proba.max())
 
         st.divider()
-        warna  = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
-        emoji  = EMOJI_ZONA.get(label_name.lower(), "⚪")
+        warna = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
+        emoji = EMOJI_ZONA.get(label_name.lower(), "⚪")
 
         col_res1, col_res2 = st.columns([1, 1.5])
         with col_res1:
@@ -265,7 +276,6 @@ elif halaman == "📊 Prediksi Batch (CSV)":
         "CSV harus memiliki kolom: `" + "`, `".join(FEATURE_NAMES) + "`"
     )
 
-    # Template download
     template_df = pd.DataFrame(columns=FEATURE_NAMES)
     template_df.loc[0] = [15.0, 40, 2500.0, 3.0, le_soil.classes_[0], 300.0, 0.5]
     template_df.loc[1] = [5.0,  20, 3200.0, 1.2, le_soil.classes_[0], 100.0, 0.2]
@@ -284,65 +294,47 @@ elif halaman == "📊 Prediksi Batch (CSV)":
         st.success(f"✅ File berhasil dibaca: {len(df_up)} baris, {len(df_up.columns)} kolom")
         st.dataframe(df_up.head(), use_container_width=True)
 
-        # Validasi kolom
         missing_cols = [c for c in FEATURE_NAMES if c not in df_up.columns]
         if missing_cols:
             st.error(f"❌ Kolom berikut tidak ditemukan: {missing_cols}")
         else:
-            df_proc = df_up[FEATURE_NAMES].copy()
+            try:
+                df_proc = preprocess(df_up)
 
-            if df_proc["Soil_Type"].dtype == object:
-                df_proc["Soil_Type"] = le_soil.transform(df_proc["Soil_Type"].astype(str))
-            
-            KOLOM_NUMERIK = [f for f in FEATURE_NAMES if f != "Soil_Type"]
-            for col in KOLOM_NUMERIK:
-                df_proc[col] = pd.to_numeric(df_proc[col], errors="coerce")
-            
-            df_proc = df_proc.astype(float)
-            pred_enc  = model.predict(df_proc)
-            pred_label = le_target.inverse_transform(pred_enc)
-            pred_proba = model.predict_proba(df_proc).max(axis=1)
+                pred_enc   = model.predict(df_proc)
+                pred_label = le_target.inverse_transform(pred_enc)
+                pred_proba = model.predict_proba(df_proc).max(axis=1)
 
-            df_hasil = df_up.copy()
-            df_hasil["Prediksi_Zona"] = pred_label
-            df_hasil["Kepercayaan"]   = (pred_proba * 100).round(2)
+                df_hasil = df_up.copy()
+                df_hasil["Prediksi_Zona"] = pred_label
+                df_hasil["Kepercayaan"]   = (pred_proba * 100).round(2)
 
-            st.divider()
-            st.subheader("Hasil Prediksi")
+                st.divider()
+                st.subheader("Hasil Prediksi")
 
-            # Ringkasan distribusi
-            dist = pd.Series(pred_label).value_counts()
-            cols = st.columns(len(dist))
-            for col, (kls, cnt) in zip(cols, dist.items()):
-                col.metric(f"{EMOJI_ZONA.get(kls.lower(),'⚪')} {kls.title()}", f"{cnt} lokasi")
+                dist = pd.Series(pred_label).value_counts()
+                cols = st.columns(len(dist))
+                for col, (kls, cnt) in zip(cols, dist.items()):
+                    col.metric(f"{EMOJI_ZONA.get(kls.lower(),'⚪')} {kls.title()}", f"{cnt} lokasi")
 
-            st.dataframe(
-                df_hasil.style.apply(
-                    lambda row: [
-                        f"background-color:{WARNA_ZONA.get(row['Prediksi_Zona'].lower(),'#eee')}33"
-                        if col == "Prediksi_Zona" else ""
-                        for col in df_hasil.columns
-                    ], axis=1
-                ),
-                use_container_width=True
-            )
+                st.dataframe(df_hasil, use_container_width=True)
 
-            # Grafik distribusi prediksi
-            fig_dist = px.pie(
-                values=dist.values, names=dist.index,
-                color=dist.index,
-                color_discrete_map=WARNA_ZONA,
-                title="Distribusi Prediksi Zona"
-            )
-            st.plotly_chart(fig_dist, use_container_width=True)
+                fig_dist = px.pie(
+                    values=dist.values, names=dist.index,
+                    color=dist.index,
+                    color_discrete_map=WARNA_ZONA,
+                    title="Distribusi Prediksi Zona"
+                )
+                st.plotly_chart(fig_dist, use_container_width=True)
 
-            # Download hasil
-            st.download_button(
-                "⬇️ Download Hasil CSV",
-                data=df_hasil.to_csv(index=False, encoding="utf-8-sig"),
-                file_name="hasil_prediksi_banjir.csv",
-                mime="text/csv"
-            )
+                st.download_button(
+                    "⬇️ Download Hasil CSV",
+                    data=df_hasil.to_csv(index=False, encoding="utf-8-sig"),
+                    file_name="hasil_prediksi_banjir.csv",
+                    mime="text/csv"
+                )
+            except Exception as e:
+                st.error(f"❌ Gagal memproses data: {e}")
 
 # ============================================================
 # HALAMAN 4: PETA INTERAKTIF
@@ -363,77 +355,68 @@ elif halaman == "🗺️ Peta Interaktif":
         if missing_map:
             st.error(f"❌ Kolom berikut tidak ada: {missing_map}")
         else:
-            df_proc = df_map[FEATURE_NAMES].copy()
+            try:
+                df_proc = preprocess(df_map)
 
-            # Encode Soil_Type jika masih string
-            if df_proc["Soil_Type"].dtype == object:
-                df_proc["Soil_Type"] = le_soil.transform(df_proc["Soil_Type"].astype(str))
-            
-            # Paksa semua kolom ke numerik
-            KOLOM_NUMERIK = [f for f in FEATURE_NAMES if f != "Soil_Type"]
-            for col in KOLOM_NUMERIK:
-                df_proc[col] = pd.to_numeric(df_proc[col], errors="coerce")
-            
-            df_proc = df_proc.astype(float)
+                pred_enc   = model.predict(df_proc)
+                pred_label = le_target.inverse_transform(pred_enc)
+                pred_proba = model.predict_proba(df_proc).max(axis=1)
 
-            pred_enc   = model.predict(df_proc)
-            pred_label = le_target.inverse_transform(pred_enc)
-            pred_proba = model.predict_proba(df_proc).max(axis=1)
+                df_map["Pred_Label"] = pred_label
+                df_map["Pred_Proba"] = (pred_proba * 100).round(1)
 
-            df_map["Pred_Label"] = pred_label
-            df_map["Pred_Proba"] = (pred_proba * 100).round(1)
+                center = [df_map["LATITUDE"].mean(), df_map["LONGITUDE"].mean()]
+                m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
 
-            # Folium map
-            center = [df_map["LATITUDE"].mean(), df_map["LONGITUDE"].mean()]
-            m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
+                COLOR_FOLIUM = {
+                    "sangat rendah": "green",
+                    "rendah"       : "lightgreen",
+                    "sedang"       : "orange",
+                    "tinggi"       : "red",
+                }
 
-            COLOR_FOLIUM = {
-                "sangat rendah": "green",
-                "rendah"       : "lightgreen",
-                "sedang"       : "orange",
-                "tinggi"       : "red",
-            }
+                for _, row in df_map.iterrows():
+                    kls = str(row["Pred_Label"]).lower()
+                    folium.CircleMarker(
+                        location=[row["LATITUDE"], row["LONGITUDE"]],
+                        radius=5,
+                        color=COLOR_FOLIUM.get(kls, "gray"),
+                        fill=True,
+                        fill_color=COLOR_FOLIUM.get(kls, "gray"),
+                        fill_opacity=0.75,
+                        tooltip=(
+                            f"<b>Zona:</b> {row['Pred_Label']}<br>"
+                            f"<b>Kepercayaan:</b> {row['Pred_Proba']}%<br>"
+                            f"<b>Elevasi:</b> {row.get('Elevation','—')} m<br>"
+                            f"<b>Rainfall:</b> {row.get('Rainfall','—')} mm"
+                        ),
+                    ).add_to(m)
 
-            for _, row in df_map.iterrows():
-                kls = str(row["Pred_Label"]).lower()
-                folium.CircleMarker(
-                    location=[row["LATITUDE"], row["LONGITUDE"]],
-                    radius=5,
-                    color=COLOR_FOLIUM.get(kls, "gray"),
-                    fill=True,
-                    fill_color=COLOR_FOLIUM.get(kls, "gray"),
-                    fill_opacity=0.75,
-                    tooltip=(
-                        f"<b>Zona:</b> {row['Pred_Label']}<br>"
-                        f"<b>Kepercayaan:</b> {row['Pred_Proba']}%<br>"
-                        f"<b>Elevasi:</b> {row.get('Elevation','—')} m<br>"
-                        f"<b>Rainfall:</b> {row.get('Rainfall','—')} mm"
-                    ),
-                ).add_to(m)
+                legend_html = """
+                <div style="position:fixed;bottom:30px;left:30px;z-index:1000;
+                     background:white;padding:12px 16px;border-radius:8px;
+                     box-shadow:2px 2px 6px rgba(0,0,0,0.3);font-family:Arial;font-size:13px;">
+                  <b>🌊 Zona Rawan Banjir</b><br>
+                  <span style="color:green;">●</span> Sangat Rendah<br>
+                  <span style="color:lightgreen;">●</span> Rendah<br>
+                  <span style="color:orange;">●</span> Sedang<br>
+                  <span style="color:red;">●</span> Tinggi
+                </div>"""
+                m.get_root().html.add_child(folium.Element(legend_html))
 
-            legend_html = """
-            <div style="position:fixed;bottom:30px;left:30px;z-index:1000;
-                 background:white;padding:12px 16px;border-radius:8px;
-                 box-shadow:2px 2px 6px rgba(0,0,0,0.3);font-family:Arial;font-size:13px;">
-              <b>🌊 Zona Rawan Banjir</b><br>
-              <span style="color:green;">●</span> Sangat Rendah<br>
-              <span style="color:lightgreen;">●</span> Rendah<br>
-              <span style="color:orange;">●</span> Sedang<br>
-              <span style="color:red;">●</span> Tinggi
-            </div>"""
-            m.get_root().html.add_child(folium.Element(legend_html))
+                col_map, col_stat = st.columns([2, 1])
+                with col_map:
+                    st_folium(m, width=700, height=500)
+                with col_stat:
+                    st.subheader("Statistik Prediksi")
+                    dist2 = pd.Series(pred_label).value_counts()
+                    for kls, cnt in dist2.items():
+                        e = EMOJI_ZONA.get(kls.lower(), "⚪")
+                        st.metric(f"{e} {kls.title()}", f"{cnt} titik ({cnt/len(df_map)*100:.1f}%)")
 
-            col_map, col_stat = st.columns([2, 1])
-            with col_map:
-                st_folium(m, width=700, height=500)
-            with col_stat:
-                st.subheader("Statistik Prediksi")
-                dist2 = pd.Series(pred_label).value_counts()
-                for kls, cnt in dist2.items():
-                    e = EMOJI_ZONA.get(kls.lower(), "⚪")
-                    st.metric(f"{e} {kls.title()}", f"{cnt} titik ({cnt/len(df_map)*100:.1f}%)")
+            except Exception as e:
+                st.error(f"❌ Gagal memproses data: {e}")
     else:
-        # Tampilkan peta kosong default Kendari Barat
         m_default = folium.Map(
             location=[-3.983, 122.513], zoom_start=13, tiles="CartoDB positron"
         )
@@ -451,9 +434,7 @@ elif halaman == "📈 Info Model":
     with col1:
         st.subheader("Parameter XGBoost")
         params = meta["parameter_xgb"]
-        df_params = pd.DataFrame(
-            list(params.items()), columns=["Parameter", "Nilai"]
-        )
+        df_params = pd.DataFrame(list(params.items()), columns=["Parameter", "Nilai"])
         st.table(df_params)
 
         st.subheader("Kelas Output")
@@ -464,10 +445,10 @@ elif halaman == "📈 Info Model":
     with col2:
         st.subheader("Metrik Evaluasi")
         metrics = {
-            "Test Accuracy"  : meta["test_accuracy"],
-            "Test F1-Score"  : meta["test_f1"],
-            "CV F1 Mean"     : meta["cv_f1_mean"],
-            "CV F1 Std"      : meta["cv_f1_std"],
+            "Test Accuracy" : meta["test_accuracy"],
+            "Test F1-Score" : meta["test_f1"],
+            "CV F1 Mean"    : meta["cv_f1_mean"],
+            "CV F1 Std"     : meta["cv_f1_std"],
         }
         for k, v in metrics.items():
             st.metric(k, f"{v*100:.2f}%")
