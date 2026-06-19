@@ -40,8 +40,7 @@ def load_artifacts():
 
 model, le_target, le_soil, meta = load_artifacts()
 
-# Ambil nama fitur langsung dari model — sumber kebenaran tunggal
-FEATURE_NAMES = model.get_booster().feature_names
+FEATURE_NAMES = meta["fitur_input"]
 CLASS_NAMES   = meta["kelas_output"]
 
 WARNA_ZONA = {
@@ -62,8 +61,10 @@ EMOJI_ZONA = {
 # ============================================================
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     df = df[FEATURE_NAMES].copy()
+    # Encode Soil_Type jika masih string
     if df["Soil_Type"].dtype == object:
         df["Soil_Type"] = le_soil.transform(df["Soil_Type"].astype(str))
+    # Konversi tiap kolom ke float satu per satu
     for col in FEATURE_NAMES:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
     return df
@@ -72,14 +73,8 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 # SIDEBAR — NAVIGASI
 # ============================================================
 with st.sidebar:
-    st.markdown("""
-    <div style="background:linear-gradient(135deg,#1a6fc4,#56ccf2);
-         padding:20px; border-radius:10px; text-align:center; color:white; margin-bottom:10px;">
-      <div style="font-size:48px;">🌊</div>
-      <div style="font-size:18px; font-weight:700;">Flood Hazard</div>
-      <div style="font-size:12px; opacity:0.85;">Kendari Barat</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/24701-nature-natural-beauty.jpg/320px-24701-nature-natural-beauty.jpg",
+             use_column_width=True)
     st.title("🌊 Flood Hazard App")
     st.caption("Kecamatan Kendari Barat")
     st.divider()
@@ -197,82 +192,79 @@ elif halaman == "🔍 Prediksi Titik":
                 value=300.0, step=10.0,
                 help="Panjang saluran drainase terdekat"
             )
+            drainage_score = st.number_input(
+                "Skor Drainase", min_value=0.0, max_value=1.0,
+                value=0.5, step=0.01,
+                help="Skor kemampuan drainase (0 = buruk, 1 = sangat baik)"
+            )
 
         submitted = st.form_submit_button("🔮 Prediksi Sekarang", use_container_width=True, type="primary")
 
     if submitted:
-        input_values = {
+        row = {
             "Elevation"      : float(elevation),
             "LandCover"      : float(land_cover),
             "Rainfall"       : float(rainfall),
             "Slope"          : float(slope),
             "Soil_Type"      : float(le_soil.transform([soil_type])[0]),
             "Drainage_Length": float(drainage_length),
+            "Drainage_Score" : float(drainage_score),
         }
+        df_input = pd.DataFrame([[row[f] for f in FEATURE_NAMES]], columns=FEATURE_NAMES)
 
-        try:
-            df_input = pd.DataFrame(
-                [[input_values[f] for f in FEATURE_NAMES]],
-                columns=FEATURE_NAMES
+        label_enc  = model.predict(df_input)[0]
+        label_name = le_target.inverse_transform([label_enc])[0]
+        proba      = model.predict_proba(df_input)[0]
+        proba_dict = {le_target.inverse_transform([i])[0]: float(p) for i, p in enumerate(proba)}
+        confidence = float(proba.max())
+
+        st.divider()
+        warna = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
+        emoji = EMOJI_ZONA.get(label_name.lower(), "⚪")
+
+        col_res1, col_res2 = st.columns([1, 1.5])
+        with col_res1:
+            st.markdown(
+                f"""
+                <div style="background:{warna}22; border-left:6px solid {warna};
+                     padding:24px; border-radius:12px; text-align:center;">
+                  <div style="font-size:56px;">{emoji}</div>
+                  <div style="font-size:28px; font-weight:700; color:{warna};">
+                    {label_name.upper()}
+                  </div>
+                  <div style="font-size:16px; color:#555; margin-top:8px;">
+                    Zona Rawan Banjir
+                  </div>
+                  <div style="font-size:22px; font-weight:600; margin-top:12px;">
+                    Kepercayaan: {confidence*100:.1f}%
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-            label_enc  = model.predict(df_input)[0]
-            label_name = le_target.inverse_transform([label_enc])[0]
-            proba      = model.predict_proba(df_input)[0]
-            proba_dict = {le_target.inverse_transform([i])[0]: float(p) for i, p in enumerate(proba)}
-            confidence = float(proba.max())
-
-            st.divider()
-            warna = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
-            emoji = EMOJI_ZONA.get(label_name.lower(), "⚪")
-
-            col_res1, col_res2 = st.columns([1, 1.5])
-            with col_res1:
-                st.markdown(
-                    f"""
-                    <div style="background:{warna}22; border-left:6px solid {warna};
-                         padding:24px; border-radius:12px; text-align:center;">
-                      <div style="font-size:56px;">{emoji}</div>
-                      <div style="font-size:28px; font-weight:700; color:{warna};">
-                        {label_name.upper()}
-                      </div>
-                      <div style="font-size:16px; color:#555; margin-top:8px;">
-                        Zona Rawan Banjir
-                      </div>
-                      <div style="font-size:22px; font-weight:600; margin-top:12px;">
-                        Kepercayaan: {confidence*100:.1f}%
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-            with col_res2:
-                st.markdown("#### Probabilitas per Kelas")
-                sorted_proba = sorted(proba_dict.items(), key=lambda x: -x[1])
-                fig_proba = go.Figure(go.Bar(
-                    x=[p*100 for _, p in sorted_proba],
-                    y=[k.title() for k, _ in sorted_proba],
-                    orientation="h",
-                    marker_color=[WARNA_ZONA.get(k.lower(), "#95a5a6") for k, _ in sorted_proba],
-                    text=[f"{p*100:.2f}%" for _, p in sorted_proba],
-                    textposition="outside",
-                ))
-                fig_proba.update_layout(
-                    xaxis_title="Probabilitas (%)", xaxis_range=[0, 110],
-                    height=250, margin=dict(t=10, b=10),
-                    plot_bgcolor="rgba(0,0,0,0)"
-                )
-                st.plotly_chart(fig_proba, use_container_width=True)
-
-            st.info(
-                f"📌 Lokasi ini diprediksi berada pada zona **{label_name}** "
-                f"dengan tingkat kepercayaan model sebesar **{confidence*100:.1f}%**."
+        with col_res2:
+            st.markdown("#### Probabilitas per Kelas")
+            sorted_proba = sorted(proba_dict.items(), key=lambda x: -x[1])
+            fig_proba = go.Figure(go.Bar(
+                x=[p*100 for _, p in sorted_proba],
+                y=[k.title() for k, _ in sorted_proba],
+                orientation="h",
+                marker_color=[WARNA_ZONA.get(k.lower(), "#95a5a6") for k, _ in sorted_proba],
+                text=[f"{p*100:.2f}%" for _, p in sorted_proba],
+                textposition="outside",
+            ))
+            fig_proba.update_layout(
+                xaxis_title="Probabilitas (%)", xaxis_range=[0, 110],
+                height=250, margin=dict(t=10, b=10),
+                plot_bgcolor="rgba(0,0,0,0)"
             )
+            st.plotly_chart(fig_proba, use_container_width=True)
 
-        except Exception as e:
-            st.error(f"❌ Gagal melakukan prediksi: {e}")
-            st.info(f"Fitur model: {FEATURE_NAMES}")
+        st.info(
+            f"📌 Lokasi ini diprediksi berada pada zona **{label_name}** "
+            f"dengan tingkat kepercayaan model sebesar **{confidence*100:.1f}%**."
+        )
 
 # ============================================================
 # HALAMAN 3: PREDIKSI BATCH
@@ -285,8 +277,8 @@ elif halaman == "📊 Prediksi Batch (CSV)":
     )
 
     template_df = pd.DataFrame(columns=FEATURE_NAMES)
-    template_df.loc[0] = [15.0, 40, 2500.0, 3.0, le_soil.classes_[0], 300.0]
-    template_df.loc[1] = [5.0,  20, 3200.0, 1.2, le_soil.classes_[0], 100.0]
+    template_df.loc[0] = [15.0, 40, 2500.0, 3.0, le_soil.classes_[0], 300.0, 0.5]
+    template_df.loc[1] = [5.0,  20, 3200.0, 1.2, le_soil.classes_[0], 100.0, 0.2]
 
     st.download_button(
         "⬇️ Download Template CSV",
@@ -343,7 +335,6 @@ elif halaman == "📊 Prediksi Batch (CSV)":
                 )
             except Exception as e:
                 st.error(f"❌ Gagal memproses data: {e}")
-                st.info(f"Fitur model: {FEATURE_NAMES}")
 
 # ============================================================
 # HALAMAN 4: PETA INTERAKTIF
@@ -425,7 +416,6 @@ elif halaman == "🗺️ Peta Interaktif":
 
             except Exception as e:
                 st.error(f"❌ Gagal memproses data: {e}")
-                st.info(f"Fitur model: {FEATURE_NAMES}")
     else:
         m_default = folium.Map(
             location=[-3.983, 122.513], zoom_start=13, tiles="CartoDB positron"
