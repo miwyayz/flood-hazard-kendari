@@ -40,7 +40,7 @@ def load_artifacts():
 
 model, le_target, le_soil, meta = load_artifacts()
 
-FEATURE_NAMES = meta["fitur_input"]
+FEATURE_NAMES = [f for f in meta["fitur_input"] if f != "Drainage_Score"]
 CLASS_NAMES   = meta["kelas_output"]
 
 WARNA_ZONA = {
@@ -61,10 +61,8 @@ EMOJI_ZONA = {
 # ============================================================
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     df = df[FEATURE_NAMES].copy()
-    # Encode Soil_Type jika masih string
     if df["Soil_Type"].dtype == object:
         df["Soil_Type"] = le_soil.transform(df["Soil_Type"].astype(str))
-    # Konversi tiap kolom ke float satu per satu
     for col in FEATURE_NAMES:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
     return df
@@ -202,7 +200,7 @@ elif halaman == "🔍 Prediksi Titik":
         submitted = st.form_submit_button("🔮 Prediksi Sekarang", use_container_width=True, type="primary")
 
     if submitted:
-        row = {
+        input_values = {
             "Elevation"      : float(elevation),
             "LandCover"      : float(land_cover),
             "Rainfall"       : float(rainfall),
@@ -210,7 +208,10 @@ elif halaman == "🔍 Prediksi Titik":
             "Soil_Type"      : float(le_soil.transform([soil_type])[0]),
             "Drainage_Length": float(drainage_length),
         }
-        df_input = pd.DataFrame([[row[f] for f in FEATURE_NAMES]], columns=FEATURE_NAMES)
+        df_input = pd.DataFrame(
+            [[input_values[f] for f in FEATURE_NAMES]],
+            columns=FEATURE_NAMES
+        )
 
         label_enc  = model.predict(df_input)[0]
         label_name = le_target.inverse_transform([label_enc])[0]
@@ -277,8 +278,8 @@ elif halaman == "📊 Prediksi Batch (CSV)":
     )
 
     template_df = pd.DataFrame(columns=FEATURE_NAMES)
-    template_df.loc[0] = [15.0, 40, 2500.0, 3.0, le_soil.classes_[0], 300.0, 0.5]
-    template_df.loc[1] = [5.0,  20, 3200.0, 1.2, le_soil.classes_[0], 100.0, 0.2]
+    template_df.loc[0] = [15.0, 40, 2500.0, 3.0, le_soil.classes_[0], 300.0]
+    template_df.loc[1] = [5.0,  20, 3200.0, 1.2, le_soil.classes_[0], 100.0]
 
     st.download_button(
         "⬇️ Download Template CSV",
