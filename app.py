@@ -40,7 +40,8 @@ def load_artifacts():
 
 model, le_target, le_soil, meta = load_artifacts()
 
-FEATURE_NAMES = [f for f in meta["fitur_input"] if f != "Drainage_Score"]
+# Ambil nama fitur langsung dari model — sumber kebenaran tunggal
+FEATURE_NAMES = model.get_booster().feature_names
 CLASS_NAMES   = meta["kelas_output"]
 
 WARNA_ZONA = {
@@ -208,64 +209,70 @@ elif halaman == "🔍 Prediksi Titik":
             "Soil_Type"      : float(le_soil.transform([soil_type])[0]),
             "Drainage_Length": float(drainage_length),
         }
-        df_input = pd.DataFrame(
-            [[input_values[f] for f in FEATURE_NAMES]],
-            columns=FEATURE_NAMES
-        )
 
-        label_enc  = model.predict(df_input)[0]
-        label_name = le_target.inverse_transform([label_enc])[0]
-        proba      = model.predict_proba(df_input)[0]
-        proba_dict = {le_target.inverse_transform([i])[0]: float(p) for i, p in enumerate(proba)}
-        confidence = float(proba.max())
-
-        st.divider()
-        warna = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
-        emoji = EMOJI_ZONA.get(label_name.lower(), "⚪")
-
-        col_res1, col_res2 = st.columns([1, 1.5])
-        with col_res1:
-            st.markdown(
-                f"""
-                <div style="background:{warna}22; border-left:6px solid {warna};
-                     padding:24px; border-radius:12px; text-align:center;">
-                  <div style="font-size:56px;">{emoji}</div>
-                  <div style="font-size:28px; font-weight:700; color:{warna};">
-                    {label_name.upper()}
-                  </div>
-                  <div style="font-size:16px; color:#555; margin-top:8px;">
-                    Zona Rawan Banjir
-                  </div>
-                  <div style="font-size:22px; font-weight:600; margin-top:12px;">
-                    Kepercayaan: {confidence*100:.1f}%
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True
+        try:
+            df_input = pd.DataFrame(
+                [[input_values[f] for f in FEATURE_NAMES]],
+                columns=FEATURE_NAMES
             )
 
-        with col_res2:
-            st.markdown("#### Probabilitas per Kelas")
-            sorted_proba = sorted(proba_dict.items(), key=lambda x: -x[1])
-            fig_proba = go.Figure(go.Bar(
-                x=[p*100 for _, p in sorted_proba],
-                y=[k.title() for k, _ in sorted_proba],
-                orientation="h",
-                marker_color=[WARNA_ZONA.get(k.lower(), "#95a5a6") for k, _ in sorted_proba],
-                text=[f"{p*100:.2f}%" for _, p in sorted_proba],
-                textposition="outside",
-            ))
-            fig_proba.update_layout(
-                xaxis_title="Probabilitas (%)", xaxis_range=[0, 110],
-                height=250, margin=dict(t=10, b=10),
-                plot_bgcolor="rgba(0,0,0,0)"
-            )
-            st.plotly_chart(fig_proba, use_container_width=True)
+            label_enc  = model.predict(df_input)[0]
+            label_name = le_target.inverse_transform([label_enc])[0]
+            proba      = model.predict_proba(df_input)[0]
+            proba_dict = {le_target.inverse_transform([i])[0]: float(p) for i, p in enumerate(proba)}
+            confidence = float(proba.max())
 
-        st.info(
-            f"📌 Lokasi ini diprediksi berada pada zona **{label_name}** "
-            f"dengan tingkat kepercayaan model sebesar **{confidence*100:.1f}%**."
-        )
+            st.divider()
+            warna = WARNA_ZONA.get(label_name.lower(), "#95a5a6")
+            emoji = EMOJI_ZONA.get(label_name.lower(), "⚪")
+
+            col_res1, col_res2 = st.columns([1, 1.5])
+            with col_res1:
+                st.markdown(
+                    f"""
+                    <div style="background:{warna}22; border-left:6px solid {warna};
+                         padding:24px; border-radius:12px; text-align:center;">
+                      <div style="font-size:56px;">{emoji}</div>
+                      <div style="font-size:28px; font-weight:700; color:{warna};">
+                        {label_name.upper()}
+                      </div>
+                      <div style="font-size:16px; color:#555; margin-top:8px;">
+                        Zona Rawan Banjir
+                      </div>
+                      <div style="font-size:22px; font-weight:600; margin-top:12px;">
+                        Kepercayaan: {confidence*100:.1f}%
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            with col_res2:
+                st.markdown("#### Probabilitas per Kelas")
+                sorted_proba = sorted(proba_dict.items(), key=lambda x: -x[1])
+                fig_proba = go.Figure(go.Bar(
+                    x=[p*100 for _, p in sorted_proba],
+                    y=[k.title() for k, _ in sorted_proba],
+                    orientation="h",
+                    marker_color=[WARNA_ZONA.get(k.lower(), "#95a5a6") for k, _ in sorted_proba],
+                    text=[f"{p*100:.2f}%" for _, p in sorted_proba],
+                    textposition="outside",
+                ))
+                fig_proba.update_layout(
+                    xaxis_title="Probabilitas (%)", xaxis_range=[0, 110],
+                    height=250, margin=dict(t=10, b=10),
+                    plot_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(fig_proba, use_container_width=True)
+
+            st.info(
+                f"📌 Lokasi ini diprediksi berada pada zona **{label_name}** "
+                f"dengan tingkat kepercayaan model sebesar **{confidence*100:.1f}%**."
+            )
+
+        except Exception as e:
+            st.error(f"❌ Gagal melakukan prediksi: {e}")
+            st.info(f"Fitur model: {FEATURE_NAMES}")
 
 # ============================================================
 # HALAMAN 3: PREDIKSI BATCH
@@ -336,6 +343,7 @@ elif halaman == "📊 Prediksi Batch (CSV)":
                 )
             except Exception as e:
                 st.error(f"❌ Gagal memproses data: {e}")
+                st.info(f"Fitur model: {FEATURE_NAMES}")
 
 # ============================================================
 # HALAMAN 4: PETA INTERAKTIF
@@ -417,6 +425,7 @@ elif halaman == "🗺️ Peta Interaktif":
 
             except Exception as e:
                 st.error(f"❌ Gagal memproses data: {e}")
+                st.info(f"Fitur model: {FEATURE_NAMES}")
     else:
         m_default = folium.Map(
             location=[-3.983, 122.513], zoom_start=13, tiles="CartoDB positron"
