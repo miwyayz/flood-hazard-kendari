@@ -198,11 +198,6 @@ elif halaman == "🔍 Prediksi Titik":
                 value=300.0, step=10.0,
                 help="Panjang saluran drainase terdekat"
             )
-            drainage_score = st.number_input(
-                "Skor Drainase", min_value=0.0, max_value=1.0,
-                value=0.5, step=0.01,
-                help="Skor kemampuan drainase (0 = buruk, 1 = sangat baik)"
-            )
 
         submitted = st.form_submit_button("🔮 Prediksi Sekarang", use_container_width=True, type="primary")
 
@@ -214,7 +209,6 @@ elif halaman == "🔍 Prediksi Titik":
             "Slope"          : float(slope),
             "Soil_Type"      : float(le_soil.transform([soil_type])[0]),
             "Drainage_Length": float(drainage_length),
-            "Drainage_Score" : float(drainage_score),
         }
         df_input = pd.DataFrame([[row[f] for f in FEATURE_NAMES]], columns=FEATURE_NAMES)
 
