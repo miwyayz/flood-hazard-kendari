@@ -1,0 +1,10 @@
+streamlit==1.35.0
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.0
+xgboost==2.0.3
+imbalanced-learn==0.12.3
+joblib==1.4.2
+folium==0.16.0
+streamlit-folium==0.20.0
+plotly==5.22.0
