@@ -1,0 +1,45 @@
+{
+    "model_name": "XGBoost Flood Hazard Classifier",
+    "versi": "1.0",
+    "tanggal_latih": "2026-06-19 06:25:27",
+    "fitur_input": [
+        "Elevation",
+        "LandCover",
+        "Rainfall",
+        "Slope",
+        "Soil_Type",
+        "Drainage_Length",
+        "Drainage_Score"
+    ],
+    "kelas_output": [
+        "rendah",
+        "sangat rendah",
+        "sedang",
+        "tinggi"
+    ],
+    "mapping_kelas": {
+        "0": "rendah",
+        "1": "sangat rendah",
+        "2": "sedang",
+        "3": "tinggi"
+    },
+    "soil_classes": [
+        "Dystrudepts",
+        "Endoaquepts",
+        "Hapludults"
+    ],
+    "parameter_xgb": {
+        "n_estimators": 300,
+        "max_depth": 6,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.1,
+        "reg_lambda": 1.0
+    },
+    "smote": true,
+    "cv_f1_mean": 0.9633224988738579,
+    "cv_f1_std": 0.010300847018585628,
+    "test_accuracy": 0.955,
+    "test_f1": 0.9502702702702703
+}
