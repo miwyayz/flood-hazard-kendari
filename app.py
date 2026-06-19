@@ -73,8 +73,14 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 # SIDEBAR — NAVIGASI
 # ============================================================
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/24701-nature-natural-beauty.jpg/320px-24701-nature-natural-beauty.jpg",
-             use_column_width=True)
+    st.markdown("""
+    <div style="background:linear-gradient(135deg,#1a6fc4,#56ccf2);
+         padding:20px; border-radius:10px; text-align:center; color:white; margin-bottom:10px;">
+      <div style="font-size:48px;">🌊</div>
+      <div style="font-size:18px; font-weight:700;">Flood Hazard</div>
+      <div style="font-size:12px; opacity:0.85;">Kendari Barat</div>
+    </div>
+    """, unsafe_allow_html=True)
     st.title("🌊 Flood Hazard App")
     st.caption("Kecamatan Kendari Barat")
     st.divider()
